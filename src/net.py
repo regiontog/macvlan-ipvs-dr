@@ -13,8 +13,7 @@ class Net:
         self.reserved.add(ip)
 
     def get(self):
-        return next(filter(lambda it: it not in self.reserved, self.net.hosts()))
-
+        return str(next(filter(lambda ip: str(ip) not in self.reserved, self.net.hosts())))
 
 class IPVSNet:
     def __init__(self, network):
@@ -47,7 +46,7 @@ class IPVSNet:
     def add_real_server(self, cont):
         if not container.exposes_ports(cont):
             return
-        
+
         if not self.connected(cont):
             self.connect(cont)
 
