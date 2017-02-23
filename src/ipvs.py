@@ -4,7 +4,7 @@ import sys
 
 from net import IPVSNet
 
-from src.dock import client
+from dock import client
 
 if __name__ == '__main__':
     if len(sys.argv) <= 1:

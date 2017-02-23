@@ -1,6 +1,6 @@
 from ipaddress import IPv4Network
 
-from src import container
+import container
 
 
 class Net:

@@ -1,4 +1,4 @@
-from src.dock import client
+from dock import client
 
 
 def fmt(container):
