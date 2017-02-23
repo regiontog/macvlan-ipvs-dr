@@ -15,6 +15,7 @@ class Net:
     def get(self):
         return str(next(filter(lambda ip: str(ip) not in self.reserved, self.net.hosts())))
 
+
 class IPVSNet:
     def __init__(self, network):
         self.network = network
