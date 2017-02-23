@@ -28,14 +28,17 @@ class IPVSNet:
         self.network = network
         self.subnet = Net(network.attrs['IPAM']['Config'][0]['Subnet'])
         self.services = {}
+        self.containers = {}
 
         self.subnet.reserve(self.network.attrs['IPAM']['Config'][0]['Gateway'])
 
-        for ip in self.all_ips():
+        for cont, ip in self.all_ips():
             self.subnet.reserve(ip)
+            self.containers[cont] = ip
 
         @self.handler(('connect',))
         def connect(cont):
+            self.containers[cont] = ip
             self.add_real_server(cont)
 
         @self.handler(('disconnect',))
@@ -53,7 +56,9 @@ class IPVSNet:
         print("Connecting {cont} to network {name}".format(cont=container.fmt(cont), name=self.network.name))
 
         self.network.connect(cont)
-        self.subnet.reserve(self.find_ip(cont))
+        ip = self.find_ip(cont)
+        self.subnet.reserve(ip)
+        self.containers[cont.id] = ip
 
     def find_ip(self, cont):
         self.network.reload()
@@ -77,25 +82,29 @@ class IPVSNet:
 
         service = self.services[service_name]
 
+        def server_exec(cmd):
+            cont.exec_run(cmd)
+
         print("Adding {cont} to virtual server {vip}".format(cont=container.fmt(cont), vip=service.vip))
         for port, _ in container.exposed_ports(cont):
             if not service.available(port):
                 service.create_vs(port)
 
-            service.add_real(rip, port, print)
+            service.add_real(rip, port, server_exec)
 
     def all_ips(self):
         self.network.reload()
-        for cont in self.network.attrs['Containers'].values():
-            yield cont['IPv4Address'].split('/')[0]
+        for cont, attrs in self.network.attrs['Containers'].items():
+            yield cont, attrs['IPv4Address'].split('/')[0]
 
     def remove(self, cont):
         service, _ = container.ns(cont)
-        rip = self.find_ip(cont)
+        ip = self.containers[cont.id]
+        del self.containers[cont.id]
 
-        self.subnet.free(rip)
+        self.subnet.free(ip)
         for port, _ in container.exposed_ports(cont):
-            self.services[service].remove(rip, port)
+            self.services[service].remove(ip, port)
 
     def handler(self, actions):
         def decorator(fn):

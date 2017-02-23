@@ -21,7 +21,7 @@ if __name__ == '__main__':
         self_id = sys.argv[2]
 
     def ipvsadm(cmd):
-        print("ipvsadm " + cmd)
+        self.exec_run("ipvsadm " + cmd)
 
     net = IPVSNet(client.networks.get(network_name), ipvsadm)
 
