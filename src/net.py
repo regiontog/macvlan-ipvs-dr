@@ -37,7 +37,7 @@ class IPVSNet:
     def connect(self, cont):
         print("Connecting {cont} to network {name}".format(cont=container.fmt(cont), name=self.network.name))
 
-        self.network.connect(self)
+        self.network.connect(cont)
         self.subnet.reserve(container.find_ip(cont, self.network.name))
 
     def add_real_server(self, cont):
