@@ -24,12 +24,6 @@ def handler(type, actions):
     return decorator
 
 
-@handler('network', ('connect',))
-def connect(event):
-    print('Something connected to a network.')
-    print(event)
-
-
 if __name__ == '__main__':
     if len(sys.argv) <= 1:
         print('Not enough arguments')
@@ -44,6 +38,12 @@ if __name__ == '__main__':
         self_id = sys.argv[2]
 
     net = IPVSNet(client.networks.get(network_name))
+
+    @handler('network', ('connect',))
+    def connect(event):
+        if event['Actor']['Attributes']['name'] == net.network.name:
+            cont = client.containers.get(event['Actor']['Attributes']['container'])
+            net.add_real_server(cont)
 
     self = client.containers.get(self_id)
     if not net.connected(self):
