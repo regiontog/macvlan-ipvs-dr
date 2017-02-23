@@ -20,10 +20,10 @@ if __name__ == '__main__':
         network_name = sys.argv[1]
         self_id = sys.argv[2]
 
-    def ipvsadm(cmd):
-        self.exec_run("ipvsadm " + cmd)
+    def ipvs_exec(cmd):
+        self.exec_run(cmd)
 
-    net = IPVSNet(client.networks.get(network_name), ipvsadm)
+    net = IPVSNet(client.networks.get(network_name), ipvs_exec)
 
     self = client.containers.get(self_id)
     if not net.connected(self):

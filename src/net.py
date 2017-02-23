@@ -23,8 +23,8 @@ class Net:
 
 
 class IPVSNet:
-    def __init__(self, network, ipvsadm):
-        self.ipvsadm = ipvsadm
+    def __init__(self, network, ipvs_exec):
+        self.ipvs_exec = ipvs_exec
         self.network = network
         self.subnet = Net(network.attrs['IPAM']['Config'][0]['Subnet'])
         self.services = {}
@@ -78,7 +78,7 @@ class IPVSNet:
             vip = self.subnet.get()
             self.subnet.reserve(vip)
             print("Service {service} available at {vip}".format(service=service_name, vip=vip))
-            self.services[service_name] = Service(self.ipvsadm, vip)
+            self.services[service_name] = Service(self.ipvs_exec, vip)
 
         service = self.services[service_name]
 
@@ -121,24 +121,28 @@ class IPVSNet:
 
 
 class Service:
-    def __init__(self, ipvsadm, ip):
+    def __init__(self, ipvs_exec, ip):
         self.vip = ip
-        self.ipvsadm = ipvsadm
+        self.ipvs_exec = ipvs_exec
         self.virtual_servers = {}
+
+        self.ipvs_exec("ip addr add {vip}/32 broadcast {vip} dev eth0 label eth0:{vip}".format(vip=self.vip))
+        self.ipvs_exec("route add -host {vip} dev eth0:{vip}".format(vip=self.vip))
 
     def add_real(self, rip, port, real_server_exec):
         self.virtual_servers[port].append(rip)
-        self.ipvsadm("-a -t {vip}:{port} -r {rip} -g -w 1".format(vip=self.vip, port=port, rip=rip))
-        real_server_exec("ip addr add {vip}/32 dev lo".format(vip=self.vip))
+        self.ipvs_exec("ipvsadm -a -t {vip}:{port} -r {rip} -g -w 1".format(vip=self.vip, port=port, rip=rip))
+        real_server_exec("ip addr add {vip}/32 dev lo label lo:{vip}".format(vip=self.vip))
+        real_server_exec("route add -host {vip} dev lo:{vip}".format(vip=self.vip))
         real_server_exec("ip link set dev lo arp off")
 
     def create_vs(self, port):
         self.virtual_servers[port] = []
-        self.ipvsadm("-A -t {vip}:{port}".format(vip=self.vip, port=port))
+        self.ipvs_exec("ipvsadm -A -t {vip}:{port} -s rr".format(vip=self.vip, port=port))
 
     def available(self, port):
         return port in self.virtual_servers
 
     def free(self, rip, port):
         self.virtual_servers[port].remove(rip)
-        self.ipvsadm("-a -t {vip}:{port} -d {rip}".format(vip=self.vip, port=port, rip=rip))
+        self.ipvs_exec("ipvsadm -a -t {vip}:{port} -d {rip}".format(vip=self.vip, port=port, rip=rip))
