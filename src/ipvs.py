@@ -22,8 +22,8 @@ if __name__ == '__main__':
     net = IPVSNet(client.networks.get(network_name))
 
     self = client.containers.get(self_id)
-    print(self.name)
-    # net.connect(self)
+    if not net.connected(self):
+        net.connect(self)
 
     for container in net.network.containers:
         if container is not self:

@@ -22,6 +22,8 @@ class IPVSNet:
         self.subnet = Net(network.attrs['IPAM']['Config'][0]['Subnet'])
         self.services = {}
 
+        self.subnet.reserve(self.network.attrs['IPAM']['Config'][0]['Gateway'])
+
         for ip in self.all_ips():
             self.subnet.reserve(ip)
 
