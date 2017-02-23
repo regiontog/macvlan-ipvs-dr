@@ -29,7 +29,7 @@ class IPVSNet:
 
     def connected(self, cont):
         try:
-            container.find_ip(cont, self.network.name)
+            self.find_ip(cont)
             return True
         except KeyError:
             return False
@@ -38,14 +38,18 @@ class IPVSNet:
         print("Connecting {cont} to network {name}".format(cont=container.fmt(cont), name=self.network.name))
 
         self.network.connect(cont)
-        self.subnet.reserve(container.find_ip(cont, self.network.name))
+        self.subnet.reserve(self.find_ip(cont))
+
+    def find_ip(self, cont):
+        self.network.reload()
+        return self.network.attrs['Containers'][cont.id]['IPv4Address'].split('/')[0]
 
     def add_real_server(self, cont):
         if not self.connected(cont):
             self.connect(cont)
 
         service_name, server = container.ns(cont)
-        rip = container.find_ip(cont, self.network.name)
+        rip = self.find_ip(cont)
 
         if not service_name in self.services:
             vip = self.subnet.get()
@@ -63,6 +67,7 @@ class IPVSNet:
             service.add_real(rip, port, print)
 
     def all_ips(self):
+        self.network.reload()
         for cont in self.network.attrs['Containers'].values():
             yield cont['IPv4Address'].split('/')[0]
 
