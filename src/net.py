@@ -1,10 +1,9 @@
-from ipaddress import IPv4Network
-
 import functools
+from ipaddress import IPv4Network
 
 import container
 import handle
-from dock import client
+from dock import client, print_cmd
 
 
 class Net:
@@ -83,7 +82,7 @@ class IPVSNet:
         service = self.services[service_name]
 
         def server_exec(cmd):
-            print(cont.exec_run(cmd))
+            print_cmd(cont, cmd)
 
         print("Adding {cont} to virtual server {vip}".format(cont=container.fmt(cont), vip=service.vip))
         for port, _ in container.exposed_ports(cont):
@@ -100,7 +99,8 @@ class IPVSNet:
     def remove(self, cont):
         service, _ = container.ns(cont)
 
-        print("Removing {cont} from virtual server {vip}".format(cont=container.fmt(cont), vip=self.services[service].vip))
+        print("Removing {cont} from virtual server {vip}".format(cont=container.fmt(cont),
+                                                                 vip=self.services[service].vip))
 
         ip = self.containers[cont.id]
         del self.containers[cont.id]

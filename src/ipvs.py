@@ -4,7 +4,7 @@ import json
 import sys
 
 import handle
-from dock import client
+from dock import client, print_cmd
 from net import IPVSNet
 
 if __name__ == '__main__':
@@ -21,7 +21,7 @@ if __name__ == '__main__':
         self_id = sys.argv[2]
 
     def ipvs_exec(cmd):
-        print(self.exec_run(cmd))
+        print_cmd(self, cmd)
 
     net = IPVSNet(client.networks.get(network_name), ipvs_exec)
 
