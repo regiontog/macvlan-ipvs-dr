@@ -25,17 +25,25 @@ class IPVSNet:
         for ip in self.all_ips():
             self.subnet.reserve(ip)
 
+    def connected(self, cont):
+        try:
+            container.find_ip(cont, self.network.name)
+            return True
+        except KeyError:
+            return False
+
     def connect(self, cont):
         print("Connecting {cont} to network {name}".format(cont=container.fmt(cont), name=self.network.name))
 
-        self.subnet.reserve(container.find_ip(cont))
+        self.subnet.reserve(container.find_ip(cont, self.network.name))
         self.network.connect(self)
 
     def add_real_server(self, cont):
-        # Make sure container is connected?
+        if not self.connected(cont):
+            self.connect(cont)
 
         service_name, server = container.ns(cont)
-        rip = container.find_ip(cont)
+        rip = container.find_ip(cont, self.network.name)
 
         if not service_name in self.services:
             vip = self.subnet.get()
@@ -46,7 +54,7 @@ class IPVSNet:
         service = self.services[service_name]
 
         print("Adding {cont} to virtual server {vip}".format(cont=container.fmt(cont), vip=service.vip))
-        for port in container.exposed_ports(cont):
+        for port, _ in container.exposed_ports(cont):
             if not service.available(port):
                 service.create_vs(port)
 

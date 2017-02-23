@@ -18,9 +18,12 @@ def ns(container):
     return image_name, container.name
 
 
-def find_ip(container):
-    return None
+def find_ip(container, net):
+    return container.attrs['NetworkSettings']['Networks'][net]['IPAddress']
 
 
 def exposed_ports(container):
-    return None
+    ports = container.attrs['Config']['ExposedPorts'].keys()
+    for port in ports:
+        port, protocol = port.split('/')[0], port.split('/')[1]
+        yield port, protocol
