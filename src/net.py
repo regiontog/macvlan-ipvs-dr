@@ -73,7 +73,7 @@ class IPVSNet:
             vip = self.subnet.get()
             self.subnet.reserve(vip)
             print("Service {service} available at {vip}".format(service=service_name, vip=vip))
-            self.services[service_name] = Service(vip, self.ipvsadm)
+            self.services[service_name] = Service(self.ipvsadm, vip)
 
         service = self.services[service_name]
 
@@ -125,7 +125,7 @@ class Service:
 
     def create_vs(self, port):
         self.virtual_servers[port] = []
-        self.ipvsadm("ipvsadm -A -t {vip}:{port}".format(vip=self.vip, port=port))
+        self.ipvsadm("-A -t {vip}:{port}".format(vip=self.vip, port=port))
 
     def available(self, port):
         return port in self.virtual_servers
