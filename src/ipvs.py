@@ -3,26 +3,9 @@
 import json
 import sys
 
+import handle
 from dock import client
 from net import IPVSNet
-
-handlers = []
-
-
-def handle(event):
-    for spec, fn in handlers:
-        type, actions = spec
-        if type == event['Type'] and event['Action'] in actions:
-            fn(event)
-
-
-def handler(type, actions):
-    def decorator(fn):
-        handlers.append(((type, actions), fn))
-        return fn
-
-    return decorator
-
 
 if __name__ == '__main__':
     if len(sys.argv) <= 1:
@@ -37,13 +20,10 @@ if __name__ == '__main__':
         network_name = sys.argv[1]
         self_id = sys.argv[2]
 
-    net = IPVSNet(client.networks.get(network_name))
+    def ipvsadm(cmd):
+        print("ipvsadm " + cmd)
 
-    @handler('network', ('connect',))
-    def connect(event):
-        if event['Actor']['Attributes']['name'] == net.network.name:
-            cont = client.containers.get(event['Actor']['Attributes']['container'])
-            net.add_real_server(cont)
+    net = IPVSNet(client.networks.get(network_name), ipvsadm)
 
     self = client.containers.get(self_id)
     if not net.connected(self):
@@ -54,4 +34,4 @@ if __name__ == '__main__':
             net.add_real_server(container)
 
     for event in client.events():
-        handle(json.loads(event.decode('utf-8')))
+        handle.handle(json.loads(event.decode('utf-8')))

@@ -1,6 +1,10 @@
 from ipaddress import IPv4Network
 
+import functools
+
 import container
+import handle
+from dock import client
 
 
 class Net:
@@ -11,12 +15,16 @@ class Net:
     def reserve(self, ip):
         self.reserved.add(ip)
 
+    def free(self, ip):
+        self.reserved.remove(ip)
+
     def get(self):
         return str(next(filter(lambda ip: str(ip) not in self.reserved, self.net.hosts())))
 
 
 class IPVSNet:
-    def __init__(self, network):
+    def __init__(self, network, ipvsadm):
+        self.ipvsadm = ipvsadm
         self.network = network
         self.subnet = Net(network.attrs['IPAM']['Config'][0]['Subnet'])
         self.services = {}
@@ -25,6 +33,14 @@ class IPVSNet:
 
         for ip in self.all_ips():
             self.subnet.reserve(ip)
+
+        @self.handler(('connect',))
+        def connect(cont):
+            self.add_real_server(cont)
+
+        @self.handler(('disconnect',))
+        def disconnect(cont):
+            self.remove(cont)
 
     def connected(self, cont):
         try:
@@ -57,7 +73,7 @@ class IPVSNet:
             vip = self.subnet.get()
             self.subnet.reserve(vip)
             print("Service {service} available at {vip}".format(service=service_name, vip=vip))
-            self.services[service_name] = Service(vip)
+            self.services[service_name] = Service(vip, self.ipvsadm)
 
         service = self.services[service_name]
 
@@ -73,21 +89,47 @@ class IPVSNet:
         for cont in self.network.attrs['Containers'].values():
             yield cont['IPv4Address'].split('/')[0]
 
+    def remove(self, cont):
+        service, _ = container.ns(cont)
+        rip = self.find_ip(cont)
+
+        self.subnet.free(rip)
+        for port, _ in container.exposed_ports(cont):
+            self.services[service].remove(rip, port)
+
+    def handler(self, actions):
+        def decorator(fn):
+            @functools.wraps(fn)
+            def wrapper(event):
+                if event['Actor']['Attributes']['name'] == self.network.name:
+                    cont = client.containers.get(event['Actor']['Attributes']['container'])
+                    fn(cont)
+
+            handle.handler('network', actions)(wrapper)
+            return fn
+
+        return decorator
+
 
 class Service:
-    def __init__(self, ip):
+    def __init__(self, ipvsadm, ip):
         self.vip = ip
+        self.ipvsadm = ipvsadm
         self.virtual_servers = {}
 
     def add_real(self, rip, port, real_server_exec):
         self.virtual_servers[port].append(rip)
-        print("#TODO: ipvsadm -a -t {vip}:{port} -r {rip} -g -w 1".format(vip=self.vip, port=port, rip=rip))
+        self.ipvsadm("-a -t {vip}:{port} -r {rip} -g -w 1".format(vip=self.vip, port=port, rip=rip))
         real_server_exec("ip addr add {vip}/32 dev lo".format(vip=self.vip))
         real_server_exec("ip link set dev lo arp off")
 
     def create_vs(self, port):
         self.virtual_servers[port] = []
-        print("#TODO: ipvsadm -A -t {vip}:{port}".format(vip=self.vip, port=port))
+        self.ipvsadm("ipvsadm -A -t {vip}:{port}".format(vip=self.vip, port=port))
 
     def available(self, port):
         return port in self.virtual_servers
+
+    def free(self, rip, port):
+        self.virtual_servers[port].remove(rip)
+        self.ipvsadm("-a -t {vip}:{port} -d {rip}".format(vip=self.vip, port=port, rip=rip))
