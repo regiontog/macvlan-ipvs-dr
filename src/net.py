@@ -38,7 +38,7 @@ class IPVSNet:
 
         @self.handler(('connect',))
         def connect(cont):
-            self.containers[cont] = ip
+            self.containers[cont.id] = self.find_ip(cont)
             self.add_real_server(cont)
 
         @self.handler(('disconnect',))
@@ -72,7 +72,7 @@ class IPVSNet:
             self.connect(cont)
 
         service_name, server = container.ns(cont)
-        rip = self.find_ip(cont)
+        rip = self.containers[cont.id]
 
         if not service_name in self.services:
             vip = self.subnet.get()
@@ -143,6 +143,6 @@ class Service:
     def available(self, port):
         return port in self.virtual_servers
 
-    def free(self, rip, port):
+    def remove(self, rip, port):
         self.virtual_servers[port].remove(rip)
         self.ipvs_exec("ipvsadm -a -t {vip}:{port} -d {rip}".format(vip=self.vip, port=port, rip=rip))
