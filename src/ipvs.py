@@ -54,4 +54,4 @@ if __name__ == '__main__':
             net.add_real_server(container)
 
     for event in client.events():
-        handle(json.loads(event))
+        handle(json.loads(event.decode('utf-8')))
