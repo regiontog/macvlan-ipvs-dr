@@ -83,7 +83,7 @@ class IPVSNet:
         service = self.services[service_name]
 
         def server_exec(cmd):
-            cont.exec_run(cmd)
+            print(cont.exec_run(cmd))
 
         print("Adding {cont} to virtual server {vip}".format(cont=container.fmt(cont), vip=service.vip))
         for port, _ in container.exposed_ports(cont):
@@ -99,6 +99,9 @@ class IPVSNet:
 
     def remove(self, cont):
         service, _ = container.ns(cont)
+
+        print("Removing {cont} from virtual server {vip}".format(cont=container.fmt(cont), vip=self.services[service].vip))
+
         ip = self.containers[cont.id]
         del self.containers[cont.id]
 
@@ -132,7 +135,7 @@ class Service:
     def add_real(self, rip, port, real_server_exec):
         self.virtual_servers[port].append(rip)
         self.ipvs_exec("ipvsadm -a -t {vip}:{port} -r {rip} -g -w 1".format(vip=self.vip, port=port, rip=rip))
-        real_server_exec("ip addr add {vip}/32 dev lo label lo:{vip}".format(vip=self.vip))
+        real_server_exec("ip addr add {vip}/32 broadcast {vip} dev lo label lo:{vip}".format(vip=self.vip))
         real_server_exec("route add -host {vip} dev lo:{vip}".format(vip=self.vip))
         real_server_exec("ip link set dev lo arp off")
 

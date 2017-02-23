@@ -21,7 +21,7 @@ if __name__ == '__main__':
         self_id = sys.argv[2]
 
     def ipvs_exec(cmd):
-        self.exec_run(cmd)
+        print(self.exec_run(cmd))
 
     net = IPVSNet(client.networks.get(network_name), ipvs_exec)
 
