@@ -23,3 +23,7 @@ def exposed_ports(container):
     for port in ports:
         port, protocol = port.split('/')[0], port.split('/')[1]
         yield port, protocol
+
+
+def exposes_ports(container):
+    return 'ExposedPorts' in container.attrs['Config']

@@ -45,6 +45,9 @@ class IPVSNet:
         return self.network.attrs['Containers'][cont.id]['IPv4Address'].split('/')[0]
 
     def add_real_server(self, cont):
+        if not container.exposes_ports(cont):
+            return
+        
         if not self.connected(cont):
             self.connect(cont)
 
