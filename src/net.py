@@ -9,7 +9,6 @@ class Net:
         self.net = IPv4Network(addr)
 
     def reserve(self, ip):
-        print("Reserving ip {ip}".format(ip=ip))
         self.reserved.add(ip)
 
     def get(self):
@@ -87,7 +86,6 @@ class Service:
         real_server_exec("ip link set dev lo arp off")
 
     def create_vs(self, port):
-        print("Creating virtual server at {vip}:{port}".format(vip=self.vip, port=port))
         self.virtual_servers[port] = []
         print("#TODO: ipvsadm -A -t {vip}:{port}".format(vip=self.vip, port=port))
 
