@@ -129,9 +129,10 @@ class Service:
         self.vip = ip
         self.ipvs_exec = ipvs_exec
         self.virtual_servers = {}
+        self.lbl = ip.replace('.', '')
 
-        self.ipvs_exec("ip addr add {vip}/32 broadcast {vip} dev eth0 label eth0:{vip}".format(vip=self.vip))
-        self.ipvs_exec("route add {vip} dev eth0:{vip}".format(vip=self.vip))
+        self.ipvs_exec("ip addr add {vip}/32 broadcast {vip} dev eth0 label eth0:{lbl}".format(vip=self.vip, lbl=self.lbl))
+        self.ipvs_exec("route add -host {vip} dev eth0:{lbl}".format(vip=self.vip, lbl=self.lbl))
 
     def add_real(self, real, port):
         self.virtual_servers[port].append(real.rip)
@@ -180,11 +181,11 @@ class RealServer:
 
     def attach(self, service):
         self.attached.add(service)
-        self.ip_exec("ip addr add {vip}/32 broadcast {vip} dev lo label lo:{vip}".format(vip=service.vip))
-        self.ip_exec("ip route add {vip} dev lo:{vip}".format(vip=service.vip))
+        self.ip_exec("ip addr add {vip}/32 broadcast {vip} dev lo label lo:{lbl}".format(vip=service.vip, lbl=service.lbl))
+        self.ip_exec("route add -host {vip} dev lo:{lbl}".format(vip=service.vip, lbl=service.lbl))
 
     def remove(self):
         for service in self.attached:
-            # self.ip_exec("ip route del {vip} dev lo:{vip}".format(vip=service.vip))
+            # self.ip_exec("ip route del {vip} dev lo:{lbl}".format(vip=service.vip, lbl=service.lbl))
             # self.ip_exec("ip addr del {vip} dev lo".format(vip=service.vip))
             service.detach(self)
