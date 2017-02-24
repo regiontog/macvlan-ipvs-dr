@@ -168,6 +168,7 @@ class RealServer:
         self.attached = set()
         self.container = cont
 
+        self.ipvs_exec('mkdir -p /var/run/netns'.format(pid=self.pid))
         self.ipvs_exec('ln -s /host-proc/{pid}/ns/net /var/run/netns/{pid}'.format(pid=self.pid))
         self.ip_exec("ip link set dev lo arp off")
 
