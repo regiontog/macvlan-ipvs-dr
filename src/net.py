@@ -18,7 +18,7 @@ class Net:
         self.reserved.remove(ip)
 
     def get(self):
-        return str(next(filter(lambda ip: str(ip) not in self.reserved, self.net.hosts())))
+        return str(next(filter(lambda ip: str(ip) not in self.reserved, reversed(list(self.net.hosts())))))
 
 
 class IPVSNet:
@@ -131,7 +131,7 @@ class Service:
         self.virtual_servers = {}
 
         self.ipvs_exec("ip addr add {vip}/32 broadcast {vip} dev eth0 label eth0:{vip}".format(vip=self.vip))
-        self.ipvs_exec("route add -host {vip} dev eth0:{vip}".format(vip=self.vip))
+        self.ipvs_exec("route add {vip} dev eth0:{vip}".format(vip=self.vip))
 
     def add_real(self, real, port):
         self.virtual_servers[port].append(real.rip)
@@ -181,7 +181,7 @@ class RealServer:
     def attach(self, service):
         self.attached.add(service)
         self.ip_exec("ip addr add {vip}/32 broadcast {vip} dev lo label lo:{vip}".format(vip=service.vip))
-        self.ip_exec("ip route add -host {vip} dev lo:{vip}".format(vip=service.vip))
+        self.ip_exec("ip route add {vip} dev lo:{vip}".format(vip=service.vip))
 
     def remove(self):
         for service in self.attached:
