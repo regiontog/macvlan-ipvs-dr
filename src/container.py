@@ -15,6 +15,7 @@ def ns(container):
     else:
         image_name = image.short_id.split(":")[1]
 
+    image_name.replace('/', '-')
     return image_name, container.name
 
 
