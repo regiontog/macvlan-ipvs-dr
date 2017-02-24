@@ -1,5 +1,5 @@
 FROM armhf/alpine
-RUN apk add --no-cache python3 python3-dev ipvsadm
+RUN apk add --no-cache python3 python3-dev ipvsadm iproute2
 ADD requirements.txt /docker-ipvs/requirements.txt
 RUN pip3 install -r /docker-ipvs/requirements.txt
 ADD src /docker-ipvs
