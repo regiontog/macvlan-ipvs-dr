@@ -3,7 +3,7 @@ from ipaddress import IPv4Network
 
 import container
 import handle
-from dock import client, print_cmd
+from dock import client
 
 
 class Net:
@@ -28,6 +28,7 @@ class IPVSNet:
         self.subnet = Net(network.attrs['IPAM']['Config'][0]['Subnet'])
         self.services = {}
         self.containers = {}
+        self.reals = {}
 
         self.subnet.reserve(self.network.attrs['IPAM']['Config'][0]['Gateway'])
 
@@ -38,6 +39,7 @@ class IPVSNet:
         @self.handler(('connect',))
         def connect(cont):
             self.containers[cont.id] = self.find_ip(cont)
+            self.subnet.reserve(self.containers[cont.id])
             self.add_real_server(cont)
 
         @self.handler(('disconnect',))
@@ -55,9 +57,8 @@ class IPVSNet:
         print("Connecting {cont} to network {name}".format(cont=container.fmt(cont), name=self.network.name))
 
         self.network.connect(cont)
-        ip = self.find_ip(cont)
-        self.subnet.reserve(ip)
-        self.containers[cont.id] = ip
+        self.containers[cont.id] = self.find_ip(cont)
+        self.subnet.reserve(self.containers[cont.id])
 
     def find_ip(self, cont):
         self.network.reload()
@@ -73,6 +74,8 @@ class IPVSNet:
         service_name, server = container.ns(cont)
         rip = self.containers[cont.id]
 
+        self.reals[rip] = RealServer(self.ipvs_exec, cont, rip)
+
         if not service_name in self.services:
             vip = self.subnet.get()
             self.subnet.reserve(vip)
@@ -81,15 +84,12 @@ class IPVSNet:
 
         service = self.services[service_name]
 
-        def server_exec(cmd):
-            print_cmd(cont, cmd)
-
         print("Adding {cont} to virtual server {vip}".format(cont=container.fmt(cont), vip=service.vip))
         for port, _ in container.exposed_ports(cont):
             if not service.available(port):
                 service.create_vs(port)
 
-            service.add_real(rip, port, server_exec)
+            service.add_real(self.reals[rip], port)
 
     def all_ips(self):
         self.network.reload()
@@ -97,17 +97,17 @@ class IPVSNet:
             yield cont, attrs['IPv4Address'].split('/')[0]
 
     def remove(self, cont):
-        service, _ = container.ns(cont)
-
-        print("Removing {cont} from virtual server {vip}".format(cont=container.fmt(cont),
-                                                                 vip=self.services[service].vip))
-
         ip = self.containers[cont.id]
-        del self.containers[cont.id]
 
+        if ip in self.reals:
+            service, _ = container.ns(cont)
+            print("Removing {cont} from virtual server {vip}".format(cont=container.fmt(cont),
+                                                                     vip=self.services[service].vip))
+            self.reals[ip].remove()
+            del self.reals[ip]
+
+        del self.containers[cont.id]
         self.subnet.free(ip)
-        for port, _ in container.exposed_ports(cont):
-            self.services[service].remove(ip, port)
 
     def handler(self, actions):
         def decorator(fn):
@@ -124,6 +124,7 @@ class IPVSNet:
 
 
 class Service:
+    # TODO: Support udp, weights(heartbeat), and different scheduling-methods
     def __init__(self, ipvs_exec, ip):
         self.vip = ip
         self.ipvs_exec = ipvs_exec
@@ -132,20 +133,57 @@ class Service:
         self.ipvs_exec("ip addr add {vip}/32 broadcast {vip} dev eth0 label eth0:{vip}".format(vip=self.vip))
         self.ipvs_exec("route add -host {vip} dev eth0:{vip}".format(vip=self.vip))
 
-    def add_real(self, rip, port, real_server_exec):
-        self.virtual_servers[port].append(rip)
-        self.ipvs_exec("ipvsadm -a -t {vip}:{port} -r {rip} -g -w 1".format(vip=self.vip, port=port, rip=rip))
-        real_server_exec("ip addr add {vip}/32 broadcast {vip} dev lo label lo:{vip}".format(vip=self.vip))
-        real_server_exec("route add -host {vip} dev lo:{vip}".format(vip=self.vip))
-        real_server_exec("ip link set dev lo arp off")
+    def add_real(self, real, port):
+        self.virtual_servers[port].append(real.rip)
+        self.ipvs_exec("ipvsadm -a -t {vip}:{port} -r {rip} -g -w 1".format(vip=self.vip, port=port, rip=real.rip))
+
+        if not real.is_attached(self):
+            real.attach(self)
 
     def create_vs(self, port):
         self.virtual_servers[port] = []
         self.ipvs_exec("ipvsadm -A -t {vip}:{port} -s rr".format(vip=self.vip, port=port))
 
+    def destroy_vs(self, port):
+        del self.virtual_servers[port]
+        self.ipvs_exec("ipvsadm -D -t {vip}:{port}".format(vip=self.vip, port=port))
+
     def available(self, port):
         return port in self.virtual_servers
 
-    def remove(self, rip, port):
-        self.virtual_servers[port].remove(rip)
-        self.ipvs_exec("ipvsadm -a -t {vip}:{port} -d {rip}".format(vip=self.vip, port=port, rip=rip))
+    def detach(self, real):
+        for port in self.virtual_servers:
+            if real.rip in self.virtual_servers[port]:
+                self.ipvs_exec("ipvsadm -a -t {vip}:{port} -d {rip}".format(vip=self.vip, port=port, rip=real.rip))
+                self.virtual_servers[port].remove(real.rip)
+                if len(self.virtual_servers[port]) <= 0:
+                    self.destroy_vs(port)
+
+
+class RealServer:
+    def __init__(self, ipvs_exec, cont, rip):
+        self.pid = cont.attrs['State']['Pid']
+        self.rip = rip
+        self.ipvs_exec = ipvs_exec
+        self.attached = set()
+        self.container = cont
+
+        self.ipvs_exec('ln -s /host-proc/{pid}/ns/net /var/run/netns/{pid}'.format(pid=self.pid))
+        self.ip_exec("ip link set dev lo arp off")
+
+    def ip_exec(self, cmd):
+        self.ipvs_exec('ip netns exec {pid} '.format(pid=self.pid) + cmd)
+
+    def is_attached(self, service):
+        return service in self.attached
+
+    def attach(self, service):
+        self.attached.add(service)
+        self.ip_exec("ip addr add {vip}/32 broadcast {vip} dev lo label lo:{vip}".format(vip=service.vip))
+        self.ip_exec("ip route add -host {vip} dev lo:{vip}".format(vip=service.vip))
+
+    def remove(self):
+        for service in self.attached:
+            # self.ip_exec("ip route del {vip} dev lo:{vip}".format(vip=service.vip))
+            # self.ip_exec("ip addr del {vip} dev lo".format(vip=service.vip))
+            service.detach(self)
