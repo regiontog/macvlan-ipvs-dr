@@ -153,12 +153,18 @@ class Service:
         return port in self.virtual_servers
 
     def detach(self, real):
+        destroy = []
+
         for port in self.virtual_servers:
             if real.rip in self.virtual_servers[port]:
-                self.ipvs_exec("ipvsadm -a -t {vip}:{port} -d {rip}".format(vip=self.vip, port=port, rip=real.rip))
+                self.ipvs_exec("ipvsadm -d -t {vip}:{port} -r {rip}".format(vip=self.vip, port=port, rip=real.rip))
                 self.virtual_servers[port].remove(real.rip)
                 if len(self.virtual_servers[port]) <= 0:
-                    self.destroy_vs(port)
+                    destroy.append(port)
+
+        for port in destroy:
+            self.destroy_vs(port)
+
 
 
 class RealServer:
